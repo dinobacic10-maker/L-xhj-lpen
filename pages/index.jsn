@@ -1,0 +1,184 @@
+import { useState, useRef, useEffect } from "react";
+
+const subjects = [
+  { id: "math", label: "Matematik", emoji: "📐" },
+  { id: "swedish", label: "Svenska", emoji: "📝" },
+  { id: "english", label: "Engelska", emoji: "🌍" },
+  { id: "science", label: "NO", emoji: "🔬" },
+  { id: "history", label: "Historia", emoji: "📜" },
+  { id: "general", label: "Övrigt", emoji: "💡" },
+];
+
+const systemPrompt = `Du är Läxhjälpen – en smart, tålmodig och uppmuntrande AI-lärare för svenska elever i grundskola och gymnasium.
+
+Regler:
+- Svara ALLTID på svenska
+- Förklara steg för steg, enkelt och tydligt
+- Ge INTE bara svaret direkt – hjälp eleven förstå hur man tänker
+- Använd exempel och analogier anpassade för unga
+- Avsluta gärna med en kontrollfråga eller uppmuntran
+- Om det är ett prov/tentafråga: hjälp eleven förstå metoden, ge inte bara facit
+- Var varm, positiv och aldrig nedlåtande
+- Använd emojis sparsamt men effektivt`;
+
+export default function LaxHjalpen() {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [subject, setSubject] = useState("general");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("homework");
+  const bottomRef = useRef(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const userMsg = { role: "user", content: input.trim() };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput("");
+    setLoading(true);
+
+    const selectedSubject = subjects.find(s => s.id === subject);
+    const modeText = mode === "exam" ? "Eleven förbereder sig inför ett prov." : "Eleven gör läxor.";
+    const fullSystem = `${systemPrompt}\n\nAktuellt ämne: ${selectedSubject.label}. ${modeText}`;
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: fullSystem,
+          messages: newMessages,
+        }),
+      });
+      const data = await response.json();
+      const reply = data.content?.map(b => b.text || "").join("") || "Något gick fel, försök igen!";
+      setMessages([...newMessages, { role: "assistant", content: reply }]);
+    } catch {
+      setMessages([...newMessages, { role: "assistant", content: "Kunde inte ansluta. Försök igen!" }]);
+    }
+    setLoading(false);
+  };
+
+  const handleKey = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "linear-gradient(135deg, #0f0c29, #302b63, #24243e)",
+      fontFamily: "'Nunito', 'Segoe UI', sans-serif",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "20px 16px",
+    }}>
+      <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ fontSize: 48, marginBottom: 4 }}>🎒</div>
+        <h1 style={{
+          color: "#fff", fontSize: 32, fontWeight: 900, margin: 0,
+          letterSpacing: "-0.5px", textShadow: "0 2px 20px rgba(130,100,255,0.5)"
+        }}>Läxhjälpen</h1>
+        <p style={{ color: "#a89fd4", margin: "6px 0 0", fontSize: 15 }}>Din smarta studiekompis 🚀</p>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%", maxWidth: 640, marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+          {[{ id: "homework", label: "📚 Läxor" }, { id: "exam", label: "📋 Prov" }].map(m => (
+            <button key={m.id} onClick={() => setMode(m.id)} style={{
+              padding: "8px 20px", borderRadius: 50,
+              border: mode === m.id ? "2px solid #a78bfa" : "2px solid rgba(255,255,255,0.15)",
+              background: mode === m.id ? "rgba(167,139,250,0.2)" : "rgba(255,255,255,0.05)",
+              color: mode === m.id ? "#e9d5ff" : "#9ca3af",
+              fontWeight: 700, fontSize: 14, cursor: "pointer", transition: "all 0.2s",
+            }}>{m.label}</button>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+          {subjects.map(s => (
+            <button key={s.id} onClick={() => setSubject(s.id)} style={{
+              padding: "6px 14px", borderRadius: 50,
+              border: subject === s.id ? "2px solid #818cf8" : "2px solid rgba(255,255,255,0.1)",
+              background: subject === s.id ? "rgba(129,140,248,0.25)" : "rgba(255,255,255,0.04)",
+              color: subject === s.id ? "#c7d2fe" : "#6b7280",
+              fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.2s",
+            }}>{s.emoji} {s.label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{
+        width: "100%", maxWidth: 640, flex: 1,
+        background: "rgba(255,255,255,0.04)", backdropFilter: "blur(10px)",
+        border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20,
+        padding: 16, minHeight: 360, maxHeight: 480, overflowY: "auto",
+        display: "flex", flexDirection: "column", gap: 12, marginBottom: 16,
+      }}>
+        {messages.length === 0 && (
+          <div style={{ textAlign: "center", margin: "auto", color: "#6b7280" }}>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>✨</div>
+            <p style={{ fontSize: 15, fontWeight: 600 }}>Ställ en fråga om dina läxor!</p>
+            <p style={{ fontSize: 13, marginTop: 4 }}>T.ex. "Hur löser jag en ekvation?" eller "Förklara fotosyntesen"</p>
+          </div>
+        )}
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+            {msg.role === "assistant" && <div style={{ fontSize: 24, marginRight: 8, flexShrink: 0, alignSelf: "flex-end" }}>🎒</div>}
+            <div style={{
+              maxWidth: "80%", padding: "12px 16px",
+              borderRadius: msg.role === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+              background: msg.role === "user" ? "linear-gradient(135deg, #6366f1, #8b5cf6)" : "rgba(255,255,255,0.08)",
+              color: "#f3f4f6", fontSize: 14, lineHeight: 1.6, fontWeight: 500, whiteSpace: "pre-wrap",
+              border: msg.role === "assistant" ? "1px solid rgba(255,255,255,0.08)" : "none",
+            }}>{msg.content}</div>
+          </div>
+        ))}
+        {loading && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 24 }}>🎒</div>
+            <div style={{ padding: "10px 16px", background: "rgba(255,255,255,0.08)", borderRadius: "18px 18px 18px 4px", display: "flex", gap: 5, alignItems: "center" }}>
+              {[0, 1, 2].map(i => (
+                <div key={i} style={{ width: 8, height: 8, borderRadius: "50%", background: "#818cf8", animation: "bounce 1s infinite", animationDelay: `${i * 0.2}s` }} />
+              ))}
+            </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      <div style={{ width: "100%", maxWidth: 640, display: "flex", gap: 10 }}>
+        <textarea
+          value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKey}
+          placeholder="Skriv din fråga här... (Enter för att skicka)" rows={2}
+          style={{
+            flex: 1, padding: "12px 16px", borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.07)",
+            color: "#f3f4f6", fontSize: 14, fontFamily: "inherit", fontWeight: 500, resize: "none", outline: "none",
+          }}
+        />
+        <button onClick={sendMessage} disabled={loading || !input.trim()} style={{
+          padding: "0 20px", borderRadius: 16, border: "none",
+          background: loading || !input.trim() ? "rgba(99,102,241,0.3)" : "linear-gradient(135deg, #6366f1, #8b5cf6)",
+          color: "#fff", fontSize: 22, cursor: loading || !input.trim() ? "not-allowed" : "pointer",
+          transition: "all 0.2s", flexShrink: 0,
+        }}>➤</button>
+      </div>
+
+      <style>{`
+        @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+        textarea::placeholder { color: #4b5563; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+      `}</style>
+    </div>
+  );
+}
